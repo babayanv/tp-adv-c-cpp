@@ -42,13 +42,13 @@ Output
 bool get_int_array(FILE *stream, size_t dest_size, int *dest);
 //! Finds maximum value of [src_size] elements of [src] array.
 //! Returns found value or 0 if passed [src] pointer is invalid.
-int find_max(int *src, size_t src_size);
+int find_max(const int *src, size_t src_size);
 //! Finds maximum value of [src_size] elements of [src] array that is less than [limit].
 //! Returns found value or 0 if passed [src] pointer is invalid.
-int find_limited_max(int *src, size_t src_size, int limit);
+int find_limited_max(const int *src, size_t src_size, int limit);
 //! Finds [dest_count] number of maximum values of [src_size] elements of [src] array.
 //! Returns address of newly allocated memory if passed [src] pointer is valid. NULL otherwise.
-int* find_n_max(int *src, size_t src_size, size_t dest_count);
+int* find_n_max(const int *src, size_t src_size, size_t dest_count);
 
 
 
@@ -120,7 +120,7 @@ bool get_int_array(FILE *stream, size_t dest_size, int *dest)
 
 
 
-int find_max(int *src, size_t src_size)
+int find_max(const int *src, size_t src_size)
 {
     if(!src)
     {
@@ -141,7 +141,7 @@ int find_max(int *src, size_t src_size)
 
 
 
-int find_limited_max(int *src, size_t src_size, int limit)
+int find_limited_max(const int *src, size_t src_size, int limit)
 {
     if(!src)
     {
@@ -162,7 +162,7 @@ int find_limited_max(int *src, size_t src_size, int limit)
 
 
 
-int* find_n_max(int *src, size_t src_size, size_t dest_count)
+int* find_n_max(const int *src, size_t src_size, size_t dest_count)
 {
     if(!src)
     {
