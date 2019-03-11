@@ -83,6 +83,12 @@ int main()
         return 0;
     }
 
+    if(max_count == 0)
+    {
+        free(array);
+        return 0;
+    }
+
     int *res = find_n_max(array, array_size, max_count);
     if(!res)
     {
@@ -165,7 +171,7 @@ int find_limited_max(const int *src, size_t src_size, int limit)
 
 int* find_n_max(const int *src, size_t src_size, size_t dest_count)
 {
-    if(!src)
+    if(!src || (dest_count == 0))
     {
         return NULL;
     }
@@ -179,11 +185,6 @@ int* find_n_max(const int *src, size_t src_size, size_t dest_count)
     if(!result)
     {
         return NULL;
-    }
-
-    if(dest_count < 1)
-    {
-        return result;
     }
 
     result[0] = find_max(src, src_size);
