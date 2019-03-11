@@ -32,7 +32,7 @@ Output
 #include <limits.h>
 
 
-#define LOG_ERROR puts("[error]\n")
+#define LOG_ERROR puts("[error]")
 
 
 
