@@ -31,9 +31,7 @@ Output
 #include <stdbool.h>
 
 
-#define LOG_ERROR         puts("[error]\n")
-#define LOG_INT(x)        printf("%d ", (int)x)
-#define LOG_ARR_INT(x, y) { for(size_t i = 0; i < (size_t)y; ++i) { LOG_INT(x[i]); } }
+#define LOG_ERROR puts("[error]\n")
 
 
 
@@ -49,6 +47,9 @@ int find_limited_max(const int *src, size_t src_size, int limit);
 //! Finds [dest_count] number of maximum values of [src_size] elements of [src] array.
 //! Returns address of newly allocated memory if passed [src] pointer is valid. NULL otherwise.
 int* find_n_max(const int *src, size_t src_size, size_t dest_count);
+//! Prints [src] int array into [stream].
+//! Returns nothing.
+void print_int_array(FILE *stream, const int *src, size_t src_size);
 
 
 
@@ -90,7 +91,7 @@ int main()
         return 0;
     }
 
-    LOG_ARR_INT(res, max_count);
+    print_int_array(stdout, res, max_count);
 
     free(array);
     free(res);
@@ -193,4 +194,19 @@ int* find_n_max(const int *src, size_t src_size, size_t dest_count)
     }
 
     return result;
+}
+
+
+
+void print_int_array(FILE *stream, const int *src, size_t src_size)
+{
+    if(!stream || !src)
+    {
+        return;
+    }
+
+    for(size_t i = 0; i < src_size; ++i)
+    {
+        fprintf(stream, "%d ", src[i]);
+    }
 }
