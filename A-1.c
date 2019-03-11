@@ -29,6 +29,7 @@ Output
 #include <stdlib.h>
 #include <ctype.h>
 #include <stdbool.h>
+#include <limits.h>
 
 
 #define LOG_ERROR puts("[error]\n")
@@ -38,9 +39,6 @@ Output
 //! Reads [dest_size] number of integers from [stream] and writes to [dest] array.
 //! Returns true is specified number of elements was successfully written. False otherwise.
 bool get_int_array(FILE *stream, size_t dest_size, int *dest);
-//! Finds maximum value of [src_size] elements of [src] array.
-//! Returns found value or 0 if passed [src] pointer is invalid.
-int find_max(const int *src, size_t src_size);
 //! Finds maximum value of [src_size] elements of [src] array that is less than [limit].
 //! Returns found value or 0 if passed [src] pointer is invalid.
 int find_limited_max(const int *src, size_t src_size, int limit);
@@ -127,27 +125,6 @@ bool get_int_array(FILE *stream, size_t dest_size, int *dest)
 
 
 
-int find_max(const int *src, size_t src_size)
-{
-    if(!src)
-    {
-        return 0;
-    }
-
-    int result = src[0];
-    for(size_t i = 1; i < src_size; ++i)
-    {
-        if(src[i] > result)
-        {
-            result = src[i];
-        }
-    }
-
-    return result;
-}
-
-
-
 int find_limited_max(const int *src, size_t src_size, int limit)
 {
     if(!src)
@@ -187,7 +164,7 @@ int* find_n_max(const int *src, size_t src_size, size_t dest_count)
         return NULL;
     }
 
-    result[0] = find_max(src, src_size);
+    result[0] = find_limited_max(src, src_size, INT_MAX);
 
     for(size_t i = 1; i < dest_count; ++i)
     {
