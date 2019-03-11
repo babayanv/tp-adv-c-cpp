@@ -128,7 +128,7 @@ int find_max(const int *src, size_t src_size)
     }
 
     int result = src[0];
-    for(size_t i = 0; i < src_size; ++i)
+    for(size_t i = 1; i < src_size; ++i)
     {
         if(src[i] > result)
         {
