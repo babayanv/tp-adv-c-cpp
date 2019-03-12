@@ -133,6 +133,7 @@ typedef struct
 ////////////////////////////////////////
 //// General
 ////////////////////////////////////////
+//! Performs mathematical calculation according to passed string which has to be null-terminated.
 bigint* calculate(const char *src_str);
 size_t max(size_t a, size_t b);
 
@@ -153,14 +154,15 @@ static bool bigint_pushback(bigint *dest_bint, uint32_t src_val);
 static bool bigint_pushfront(bigint *dest_bint, uint32_t src_val);
 static bool bigint_expand(bigint *origin, size_t new_cap);
 static void bigint_remove_leading_zeros(bigint *origin);
-
+//! Compares absolute values of two bigints. Returns 1, if bint_a is greater than bint_b; -1 if bint_a is less than bint_b; 0 if they are equal.
 int bigint_compare(const bigint *bint_a, const bigint *bint_b);
+//! Next functions perform mathematical operations between two bigints and write the result into a newly allocated instance of bigint which has to be freed manually.
 bigint* bigint_add(const bigint *bint_a, const bigint *bint_b);
 bigint* bigint_subtract(const bigint *bint_a, const bigint *bint_b);
 bigint* bigint_multiply(const bigint *bint_a, const bigint *bint_b);
 bigint* bigint_divide(const bigint *bint_a, const bigint *bint_b);
 bigint* bigint_negate(const bigint *bint_a);
-
+//! Next functions perform mathematical operations between absolute values of two bigints and write the resultinto existing binint instance.
 static bool bigint_add_values(const bigint *bint_a, const bigint *bint_b, bigint *result);
 static bool bigint_subtract_values(const bigint *bint_a, const bigint *bint_b, bigint *result);
 static bool bigint_multiply_values(const bigint *bint_a, const bigint *bint_b, bigint *result);
