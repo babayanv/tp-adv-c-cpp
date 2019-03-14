@@ -147,7 +147,6 @@ bigint* bigint_from_int64(int64_t src_val);
 void bigint_destr(bigint **origin);
 void bigint_to_string(const bigint *src_bint, char **dest_str);
 void bigint_print(FILE *stream, const bigint *src_bint);
-bool bigint_shrink(bigint *origin);
 
 static bigint* bigint_create_empty(size_t cap);
 static bool bigint_pushback(bigint *dest_bint, uint32_t src_val);
@@ -161,7 +160,6 @@ bigint* bigint_add(const bigint *bint_a, const bigint *bint_b);
 bigint* bigint_subtract(const bigint *bint_a, const bigint *bint_b);
 bigint* bigint_multiply(const bigint *bint_a, const bigint *bint_b);
 bigint* bigint_divide(const bigint *bint_a, const bigint *bint_b);
-bigint* bigint_negate(const bigint *bint_a);
 //! Next functions perform mathematical operations between absolute values of two bigints and write the resultinto existing binint instance.
 static bool bigint_add_values(const bigint *bint_a, const bigint *bint_b, bigint *result);
 static bool bigint_subtract_values(const bigint *bint_a, const bigint *bint_b, bigint *result);
@@ -452,26 +450,6 @@ void bigint_print(FILE *stream, const bigint *src_bint)
     fprintf(stream, "%s\n", bint_str);
 
     free(bint_str);
-}
-
-
-
-bool bigint_shrink(bigint *bint_ptr)
-{
-    if(!bint_ptr)
-    {
-        return false;
-    }
-
-    uint32_t *ptr = (uint32_t*)realloc(bint_ptr->value, sizeof(uint32_t) * bint_ptr->length);
-    if(!ptr)
-    {
-        return false;
-    }
-    bint_ptr->value = ptr;
-    bint_ptr->capacity = bint_ptr->length;
-
-    return true;
 }
 
 
@@ -768,33 +746,6 @@ bigint* bigint_divide(const bigint *bint_a, const bigint *bint_b)
         return NULL;
     }
     result->sign = bint_a->sign * bint_b->sign;
-
-    return result;
-}
-
-
-
-bigint* bigint_negate(const bigint *bint_a)
-{
-    if(!bint_a || !bint_a->value)
-    {
-        return NULL;
-    }
-
-    bigint *result = bigint_create_empty(bint_a->length);
-    if(!result)
-    {
-        return NULL;
-    }
-
-    result->sign = bint_a->sign * NEGATIVE;
-    result->length = bint_a->length;
-    result->capacity = bint_a->length;
-
-    for(size_t i = 0; i < result->length; ++i)
-    {
-        result->value[i] = bint_a->value[i];
-    }
 
     return result;
 }
