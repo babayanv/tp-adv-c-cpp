@@ -398,6 +398,11 @@ bigint* bigint_from_int64(int64_t src_val)
 
 void bigint_destr(bigint **origin)
 {
+    if(!(*origin))
+    {
+        return;
+    }
+
     free((*origin)->value);
     free(*origin);
     *origin = NULL;
@@ -743,6 +748,14 @@ bigint* bigint_divide(const bigint *bint_a, const bigint *bint_b)
         return NULL;
     }
 
+    bigint *bint_zero = bigint_from_int64(0);
+    if(bigint_compare(bint_b, bint_zero) == 0)
+    {
+        bigint_destr(&bint_zero);
+        return NULL;
+    }
+    bigint_destr(&bint_zero);
+
     bigint *result = bigint_create_empty(bint_a->length);
     if(!result)
     {
@@ -755,8 +768,6 @@ bigint* bigint_divide(const bigint *bint_a, const bigint *bint_b)
         return NULL;
     }
     result->sign = bint_a->sign * bint_b->sign;
-
-    bigint_remove_leading_zeros(result);
 
     return result;
 }
@@ -951,6 +962,8 @@ static bool bigint_divide_values(const bigint *bint_a, const bigint *bint_b, big
     bigint_destr(&bint_current);
     bigint_destr(&bint_multiplicator);
 
+    bigint_remove_leading_zeros(result);
+
     return true;
 }
 
@@ -1000,6 +1013,11 @@ token_t* token_get(const char *src_str, size_t *str_iter)
 
 void token_destr(token_t **origin)
 {
+    if(!(*origin))
+    {
+        return;
+    }
+
     if((*origin)->kind == NUMBER)
     {
         bigint_destr(&(*origin)->data.bigint);
@@ -1160,6 +1178,11 @@ token_stack* token_stack_create(const token_t *src_array, size_t cap)
 
 void token_stack_destr(token_stack **origin)
 {
+    if(!(*origin))
+    {
+        return;
+    }
+
     do
     {
         token_t token = token_stack_pop(*origin);
@@ -1295,6 +1318,11 @@ postfix_notation* postfix_notation_create_empty()
 
 void postfix_notation_destr(postfix_notation **origin)
 {
+    if(!(*origin))
+    {
+        return;
+    }
+
     token_stack_destr(&(*origin)->operands);
     token_stack_destr(&(*origin)->operators);
     free(*origin);
