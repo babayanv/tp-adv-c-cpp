@@ -398,7 +398,7 @@ bigint* bigint_from_int64(int64_t src_val)
 
 void bigint_destr(bigint **origin)
 {
-    if(!(*origin))
+    if(!origin || !(*origin))
     {
         return;
     }
@@ -1013,7 +1013,7 @@ token_t* token_get(const char *src_str, size_t *str_iter)
 
 void token_destr(token_t **origin)
 {
-    if(!(*origin))
+    if(!origin || !(*origin))
     {
         return;
     }
@@ -1178,7 +1178,7 @@ token_stack* token_stack_create(const token_t *src_array, size_t cap)
 
 void token_stack_destr(token_stack **origin)
 {
-    if(!(*origin))
+    if(!origin || !(*origin))
     {
         return;
     }
@@ -1318,7 +1318,7 @@ postfix_notation* postfix_notation_create_empty()
 
 void postfix_notation_destr(postfix_notation **origin)
 {
-    if(!(*origin))
+    if(!origin || !(*origin))
     {
         return;
     }
