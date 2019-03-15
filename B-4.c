@@ -419,11 +419,20 @@ void bigint_to_string(const bigint *src_bint, char **dest_str)
     }
 
     char *buf_ptr = (*dest_str);
-    for(int i = (int)src_bint->length - 1; i >= 0; --i)
+
+    int i = (int)src_bint->length - 1;
+
+    snprintf(buf_ptr, MAX_UINT32_LENGTH + 1, "%u", src_bint->value[i]);
+    buf_ptr += strlen(buf_ptr);
+
+    --i;
+
+    for( ; i >= 0; --i)
     {
-        snprintf(buf_ptr, MAX_UINT32_LENGTH + 1, "%u", src_bint->value[i]);
+        snprintf(buf_ptr, MAX_UINT32_LENGTH + 1, "%09u", src_bint->value[i]);
         buf_ptr += strlen(buf_ptr);
     }
+
 }
 
 
@@ -746,6 +755,8 @@ bigint* bigint_divide(const bigint *bint_a, const bigint *bint_b)
         return NULL;
     }
     result->sign = bint_a->sign * bint_b->sign;
+
+    bigint_remove_leading_zeros(result);
 
     return result;
 }
