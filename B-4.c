@@ -84,14 +84,14 @@ typedef enum
 
 
 
-typedef bigint* (*operation_fn)(const bigint*, const bigint*);
+typedef bigint* (*operation_fn_t)(const bigint*, const bigint*);
 
 
 
 typedef union
 {
     bigint *bigint;
-    operation_fn operation_fn;
+    operation_fn_t operation_fn;
 } token_data;
 
 
@@ -110,8 +110,8 @@ typedef struct
 typedef struct
 {
     token_t *array;
+    size_t length;
     size_t capacity;
-    int top;
 } token_stack;
 
 
@@ -133,8 +133,8 @@ typedef struct
 ////////////////////////////////////////
 //// General
 ////////////////////////////////////////
-//! Performs mathematical calculation according to passed string which has to be null-terminated.
-bigint* calculate(const char *src_str);
+//! Performs mathematical calculation according to passed string.
+bigint* calculate(const char *src_str, size_t str_length);
 size_t max(size_t a, size_t b);
 
 
@@ -142,29 +142,36 @@ size_t max(size_t a, size_t b);
 ////////////////////////////////////////
 //// The bigint interface
 ////////////////////////////////////////
-bigint* bigint_from_string(const char *src_str);
+bigint* bigint_from_string(const char *src_str, size_t str_length);
 bigint* bigint_from_int64(int64_t src_val);
 void bigint_destr(bigint **origin);
-void bigint_to_string(const bigint *src_bint, char **dest_str);
-void bigint_print(FILE *stream, const bigint *src_bint);
+char* bigint_to_string(const bigint *src_bint);
+bool bigint_print(FILE *stream, const bigint *src_bint);
 
 static bigint* bigint_create_empty(size_t cap);
 static bool bigint_pushback(bigint *dest_bint, uint32_t src_val);
 static bool bigint_pushfront(bigint *dest_bint, uint32_t src_val);
 static bool bigint_expand(bigint *origin, size_t new_cap);
 static void bigint_remove_leading_zeros(bigint *origin);
-//! Compares absolute values of two bigints. Returns 1, if bint_a is greater than bint_b; -1 if bint_a is less than bint_b; 0 if they are equal.
-int bigint_compare(const bigint *bint_a, const bigint *bint_b);
-//! Next functions perform mathematical operations between two bigints and write the result into a newly allocated instance of bigint which has to be freed manually.
-bigint* bigint_add(const bigint *bint_a, const bigint *bint_b);
-bigint* bigint_subtract(const bigint *bint_a, const bigint *bint_b);
-bigint* bigint_multiply(const bigint *bint_a, const bigint *bint_b);
-bigint* bigint_divide(const bigint *bint_a, const bigint *bint_b);
-//! Next functions perform mathematical operations between absolute values of two bigints and write the resultinto existing binint instance.
-static bool bigint_add_values(const bigint *bint_a, const bigint *bint_b, bigint *result);
-static bool bigint_subtract_values(const bigint *bint_a, const bigint *bint_b, bigint *result);
-static bool bigint_multiply_values(const bigint *bint_a, const bigint *bint_b, bigint *result);
-static bool bigint_divide_values(const bigint *bint_a, const bigint *bint_b, bigint *result);
+
+int bigint_compare(const bigint *left, const bigint *right);
+
+//! Next functions perform mathematical operations between two bigints and write
+//  the result into a newly allocated instance of bigint which has to be freed
+//  manually. Considering the combinations of the signs of passed bigints, these
+//  call a corresponding function from the set below.
+bigint* bigint_add(const bigint *left, const bigint *right);
+bigint* bigint_subtract(const bigint *left, const bigint *right);
+bigint* bigint_multiply(const bigint *left, const bigint *right);
+bigint* bigint_divide(const bigint *left, const bigint *right);
+
+//! Next functions perform mathematical operations between absolute values of
+//  two bigints and write the result into existing binint instance. These are
+//  called exclusevly by the functions from the set above.
+static bool bigint_add_values(const bigint *left, const bigint *right, bigint *result);
+static bool bigint_subtract_values(const bigint *left, const bigint *right, bigint *result);
+static bool bigint_multiply_values(const bigint *left, const bigint *right, bigint *result);
+static bool bigint_divide_values(const bigint *left, const bigint *right, bigint *result);
 
 
 
@@ -181,14 +188,15 @@ static bool token_get_operand(const char *src_str, size_t *str_iter, token_t *de
 ////////////////////////////////////////
 //// The token_stack interface
 ////////////////////////////////////////
-token_stack* token_stack_create(const token_t *src_array, size_t cap);
+token_stack* token_stack_create(size_t cap);
 void token_stack_destr(token_stack **origin);
-void token_stack_push(token_stack *dest, const token_t *value);
+bool token_stack_push(token_stack *dest, const token_t *value);
 token_t token_stack_pop(token_stack *origin);
 const token_t* token_stack_peek(const token_stack *origin);
-bool token_stack_expand(token_stack *origin, size_t cap);
-bool token_stack_is_empty(const token_stack *src);
-bool token_stack_is_full(const token_stack *src);
+
+static bool token_stack_expand(token_stack *origin, size_t cap);
+static bool token_stack_is_empty(const token_stack *src);
+static bool token_stack_is_full(const token_stack *src);
 
 
 
@@ -200,7 +208,7 @@ void postfix_notation_destr(postfix_notation **origin);
 bool postfix_notation_add_token(postfix_notation *dest, token_t *token);
 
 static int postfix_notation_prioritize(const token_t *token);
-static bool postfix_notation_can_reduce(const postfix_notation *origin, const token_t *next_operator);
+static bool postfix_notation_can_reduce(const postfix_notation *origin, const token_t *next_token);
 static bool postfix_notation_reduce(postfix_notation *origin);
 
 
@@ -226,7 +234,7 @@ int main()
             return 0;
         }
 
-        bigint *result = calculate(input_str);
+        bigint *result = calculate(input_str, (size_t)input_length);
         if(!result)
         {
             LOG_ERROR;
@@ -251,18 +259,23 @@ int main()
 ////////////////////////////////////////
 //// General
 ////////////////////////////////////////
-bigint* calculate(const char *src_str)
+
+//! Performs mathematical calculation according to passed string
+bigint* calculate(const char *src_str, size_t str_length)
 {
     if(!src_str)
     {
         return NULL;
     }
 
-    size_t str_iter = 0;
-    token_kind prev = LEFT_PARENTHESIS;
     postfix_notation *notation = postfix_notation_create_empty();
+    if(!notation)
+    {
+        return NULL;
+    }
 
-    while(str_iter <= strlen(src_str))
+    token_kind prev = LEFT_PARENTHESIS; // for unary minus detection
+    for(size_t str_iter = 0; str_iter <= str_length; )
     {
         token_t *token = token_get(src_str, &str_iter);
         if(!token)
@@ -271,12 +284,23 @@ bigint* calculate(const char *src_str)
             return NULL;
         }
 
-        // Unary minus
+        // Add fictive 0 as a left operand for unary minus as 0 - num == -num
         if(prev == LEFT_PARENTHESIS && token->kind == SUBTRACTION)
         {
-            token_t zero_token = {NUMBER, {NULL}};
-            zero_token.data.bigint = bigint_from_int64(0);
-            token_stack_push(notation->operands, &zero_token);
+            token_t tzero = { .kind = NUMBER, .data.bigint = bigint_from_int64(0) };
+            if(!tzero.data.bigint)
+            {
+                token_destr(&token);
+                postfix_notation_destr(&notation);
+                return NULL;
+            }
+
+            if(!token_stack_push(notation->operands, &tzero))
+            {
+                token_destr(&token);
+                postfix_notation_destr(&notation);
+                return NULL;
+            }
         }
 
         if(!postfix_notation_add_token(notation, token))
@@ -291,9 +315,13 @@ bigint* calculate(const char *src_str)
         free(token);
     }
 
+    // If the passed string is a correct and valid mathematical expression,
+    // the only value in the notation left is the result.
     bigint *result = token_stack_pop(notation->operands).data.bigint;
 
-    if(!result || !token_stack_is_empty(notation->operators))
+    // If there are no values in the operands stack, there was none in the source expression;
+    // If there are any operators or operands left other than the result, the result is undefined.
+    if(!result || !token_stack_is_empty(notation->operators) || !token_stack_is_empty(notation->operands))
     {
         postfix_notation_destr(&notation);
         bigint_destr(&result);
@@ -317,7 +345,12 @@ size_t max(size_t a, size_t b)
 ////////////////////////////////////////
 //// The bigint interface
 ////////////////////////////////////////
-bigint* bigint_from_string(const char *src_str)
+
+//! Consecutively cuts MAX_UINT32_LENGTH (or less) characters off input string
+//  from its right end until it is not empty, converts the cut string into
+//  uint32_t instance and pushes it back into newly created bigint instance.
+//  Returns the created bigint pointer or NULL if error occurred.
+bigint* bigint_from_string(const char *src_str, size_t str_length)
 {
     if(!src_str)
     {
@@ -330,26 +363,27 @@ bigint* bigint_from_string(const char *src_str)
         return NULL;
     }
 
-    for(int i = (int)strlen(src_str); i > 0; i -= MAX_UINT32_LENGTH)
-    {
-        char buf[MAX_UINT32_LENGTH + 1];
+    char buf[MAX_UINT32_LENGTH + 1];
 
-        if(i < MAX_UINT32_LENGTH)
-        {
-            strncpy(buf, src_str, (size_t)i);
-            buf[i] = '\0';
-        }
-        else
-        {
-            strncpy(buf, &(src_str[i - MAX_UINT32_LENGTH]), MAX_UINT32_LENGTH);
-            buf[MAX_UINT32_LENGTH] = '\0';
-        }
+    for( ; str_length > MAX_UINT32_LENGTH; str_length -= MAX_UINT32_LENGTH)
+    {
+        strncpy(buf, &(src_str[str_length - MAX_UINT32_LENGTH]), MAX_UINT32_LENGTH); // cuts another MAX_UINT32_LENGTH digits from the string
+        buf[MAX_UINT32_LENGTH] = '\0';
 
         if(!bigint_pushback(new_bint, (uint32_t)strtoul(buf, NULL, 10)))
         {
             bigint_destr(&new_bint);
             return NULL;
         }
+    }
+
+    strncpy(buf, src_str, str_length); // writes remaining MAX_UINT32_LENGTH or less characters
+    buf[str_length] = '\0';
+
+    if(!bigint_pushback(new_bint, (uint32_t)strtoul(buf, NULL, 10)))
+    {
+        bigint_destr(&new_bint);
+        return NULL;
     }
 
     bigint_remove_leading_zeros(new_bint);
@@ -359,6 +393,11 @@ bigint* bigint_from_string(const char *src_str)
 
 
 
+//! Consecutively cuts MAX_UINT32_LENGTH (or less) digits from input int64_t
+//  value until it becomes equal to 0, converts the cut value into uint32_t
+//  instance and pushes it back into newly created bigint instance. Returns the
+//  created bigint pointer or NULL if error occurred. Sets the result sign
+//  accoringly.
 bigint* bigint_from_int64(int64_t src_val)
 {
     bigint *new_bint = bigint_create_empty(1);
@@ -380,6 +419,8 @@ bigint* bigint_from_int64(int64_t src_val)
             bigint_destr(&new_bint);
             return NULL;
         }
+
+        return new_bint;
     }
 
     for( ; src_val > 0; src_val /= BASE_DENARY)
@@ -396,6 +437,8 @@ bigint* bigint_from_int64(int64_t src_val)
 
 
 
+//! Frees the allocated memory for a bigint instance and nullifies the passed
+//  pointer value.
 void bigint_destr(bigint **origin)
 {
     if(!origin || !(*origin))
@@ -410,43 +453,51 @@ void bigint_destr(bigint **origin)
 
 
 
-void bigint_to_string(const bigint *src_bint, char **dest_str)
+//! Converts the passed bigint instance into string. Returns the pointer to the
+//  allocated string or NULL if error occurred.
+//! Firstly takes the value of the highest significance uint32_t value of the
+//  passed bigint as it might be of any length and prints it to the result
+//  string. Then consecutively takes another uint32_t value as it MUST be of
+//  MAX_UINT32_LENGTH and prints it to the result string.
+char* bigint_to_string(const bigint *src_bint)
 {
-    if(!src_bint || !src_bint->value)
+    if(!src_bint)
     {
-        return;
+        return NULL;
     }
 
-    *dest_str = (char*)malloc((src_bint->length * MAX_UINT32_LENGTH + 1) * sizeof(char));
-    if(!(*dest_str))
+    char *result = (char*)malloc((src_bint->length * MAX_UINT32_LENGTH + 1) * sizeof(char)); // allocates the string of the maximum possible length for the passed bigint;
+    if(!result)
     {
-        return;
+        return NULL;
     }
 
-    char *buf_ptr = (*dest_str);
+    char *str_iter = result; // the result string iterator;
+    size_t i = src_bint->length; // the passed bigint iterator. Goes from last to the first uint32_t value;
 
-    int i = (int)src_bint->length - 1;
+    snprintf(str_iter, MAX_UINT32_LENGTH + 1, "%u", src_bint->value[i - 1]); // print MAX_UINT32_LENGTH (or less) digits into the result string + '\0' char;
+    str_iter += strlen(str_iter); // shifts the iterator right by the printed value length;
 
-    snprintf(buf_ptr, MAX_UINT32_LENGTH + 1, "%u", src_bint->value[i]);
-    buf_ptr += strlen(buf_ptr);
-
-    --i;
-
-    for( ; i >= 0; --i)
+    for(--i; i > 0; --i) // repeat for the remaining uint32_t values;
     {
-        snprintf(buf_ptr, MAX_UINT32_LENGTH + 1, "%09u", src_bint->value[i]);
-        buf_ptr += strlen(buf_ptr);
+        // will ALWAYS print MAX_UINT32_LENGTH (if less substitudes the
+        // remaining digits with 0) digits into the result string + '\0' char at
+        // the end ('\0' gets rewritten by the next printed uint32_t).
+        snprintf(str_iter, MAX_UINT32_LENGTH + 1, "%09u", src_bint->value[i - 1]);
+        str_iter += strlen(str_iter);
     }
 
+    return result;
 }
 
 
 
-void bigint_print(FILE *stream, const bigint *src_bint)
+//! Prints the passed bigint instance into stream.
+bool bigint_print(FILE *stream, const bigint *src_bint)
 {
-    if(!stream || !src_bint || !src_bint->value)
+    if(!stream || !src_bint)
     {
-        return;
+        return false;
     }
 
     if(src_bint->sign == NEGATIVE)
@@ -454,20 +505,27 @@ void bigint_print(FILE *stream, const bigint *src_bint)
         fputc('-', stream);
     }
 
-    char *bint_str = NULL;
-    bigint_to_string(src_bint, &bint_str);
+    char *bint_str = bigint_to_string(src_bint);
     if(!bint_str)
     {
-        return;
+        return false;
     }
 
     fprintf(stream, "%s\n", bint_str);
 
     free(bint_str);
+
+    return true;
 }
 
 
 
+//! Next static fuctions are only called inside the listed above set of bigint
+//  functions where the passed arguments are guaranteed to be valid. Therefore
+//  the passed arguments are considered to be valid and are not explicitly
+//  checked there.
+
+//! Creates the empty instance of bigint of the [cap] capacity.
 static bigint* bigint_create_empty(size_t cap)
 {
     if(cap == 0)
@@ -481,7 +539,7 @@ static bigint* bigint_create_empty(size_t cap)
         return NULL;
     }
 
-    new_bint->value = (uint32_t*)malloc(sizeof(uint32_t) * cap);
+    new_bint->value = (uint32_t*)malloc(cap * sizeof(uint32_t));
     if(!new_bint->value)
     {
         free(new_bint);
@@ -497,13 +555,11 @@ static bigint* bigint_create_empty(size_t cap)
 
 
 
+//! Pushes the passed uint32_t value to the end of the passed bigint instance.
+//  The pushed value is considered to be the most significant one. Expands the
+//  internal array if there are not enough space to add another value.
 static bool bigint_pushback(bigint *dest_bint, uint32_t src_val)
 {
-    if(!dest_bint)
-    {
-        return false;
-    }
-
     if(dest_bint->length >= dest_bint->capacity)
     {
         if(!bigint_expand(dest_bint, dest_bint->length + 1))
@@ -520,13 +576,12 @@ static bool bigint_pushback(bigint *dest_bint, uint32_t src_val)
 
 
 
+//! Pushes the passed uint32_t value to the beginning of the passed bigint
+//  instance. The pushed value is considered to the the least significant one.
+//  Expands the internal array if there are not enough space to add another
+//  value.
 static bool bigint_pushfront(bigint *dest_bint, uint32_t src_val)
 {
-    if(!dest_bint)
-    {
-        return false;
-    }
-
     if(dest_bint->length >= dest_bint->capacity)
     {
         if(!bigint_expand(dest_bint, dest_bint->length + 1))
@@ -535,12 +590,12 @@ static bool bigint_pushfront(bigint *dest_bint, uint32_t src_val)
         }
     }
 
-    for(int i = (int)dest_bint->length - 1; i >= 0; --i)
+    for(size_t i = dest_bint->length; i > 0; --i) // shifts all values right by 1;
     {
-        dest_bint->value[i + 1] = dest_bint->value[i];
+        dest_bint->value[i] = dest_bint->value[i - 1];
     }
 
-    dest_bint->value[0] = src_val;
+    dest_bint->value[0] = src_val; // writes the passed value to the vacant element;
     ++dest_bint->length;
 
     return true;
@@ -548,6 +603,8 @@ static bool bigint_pushfront(bigint *dest_bint, uint32_t src_val)
 
 
 
+//! Expands the current capacity of the passed bigint instance with a new one if
+//  it is bigger that previous one.
 static bool bigint_expand(bigint *origin, size_t new_cap)
 {
     if(new_cap <= origin->capacity)
@@ -555,12 +612,12 @@ static bool bigint_expand(bigint *origin, size_t new_cap)
         return true;
     }
 
-    uint32_t *ptr = (uint32_t*)realloc(origin->value, sizeof(uint32_t) * new_cap);
-    if(!ptr)
+    uint32_t *new_value = (uint32_t*)realloc(origin->value, sizeof(uint32_t) * new_cap);
+    if(!new_value)
     {
         return false;
     }
-    origin->value = ptr;
+    origin->value = new_value;
     origin->capacity = new_cap;
 
     return true;
@@ -568,13 +625,10 @@ static bool bigint_expand(bigint *origin, size_t new_cap)
 
 
 
+//! Decreases the length of the bigint until the most significant value is not
+//  0. DOES NOT affect memory in any way.
 static void bigint_remove_leading_zeros(bigint *origin)
 {
-    if(!origin || !origin->value)
-    {
-        return;
-    }
-
     while(origin->value[origin->length - 1] == 0 && origin->length > 1)
     {
         --origin->length;
@@ -583,22 +637,25 @@ static void bigint_remove_leading_zeros(bigint *origin)
 
 
 
-int bigint_compare(const bigint *bint_a, const bigint *bint_b)
+//! Compares absolute values of two bigints. Returns 1, if bint_left is greater
+//  than bint_right; -1 if bint_left is less than bint_right; 0 if they are
+//  equal.
+int bigint_compare(const bigint *left, const bigint *right)
 {
-    if(!bint_a || !bint_b)
+    if(!left || !right)
     {
         return 0;
     }
 
-    for(size_t i = max(bint_a->length, bint_b->length); i > 0; --i)
+    for(size_t i = max(left->length, right->length); i > 0; --i)
     {
-        uint32_t left = i > bint_a->length ? 0 : bint_a->value[i - 1];
-        uint32_t right = i > bint_b->length ? 0 : bint_b->value[i - 1];
-        if(left > right)
+        uint32_t left_uint = i > left->length ? 0 : left->value[i - 1];
+        uint32_t right_uint = i > right->length ? 0 : right->value[i - 1];
+        if(left_uint > right_uint)
         {
             return 1;
         }
-        if(left < right)
+        if(left_uint < right_uint)
         {
             return -1;
         }
@@ -609,22 +666,29 @@ int bigint_compare(const bigint *bint_a, const bigint *bint_b)
 
 
 
-bigint* bigint_add(const bigint *bint_a, const bigint *bint_b)
+//! Next functions perform mathematical operations between two bigints and write
+//  the result into a newly allocated instance of bigint which has to be freed
+//  manually. Considering the combinations of the signs of passed bigints, these
+//  call a corresponding function from the set below.
+
+//! Performs an certain addition-corresponding (addition or subtraction)
+//  operation considering the sign of both bigint values.
+bigint* bigint_add(const bigint *left, const bigint *right)
 {
-    if(!bint_a || !bint_a->value || !bint_b || !bint_b->value)
+    if(!left || !right)
     {
         return NULL;
     }
 
-    bigint *result = bigint_create_empty(max(bint_a->length, bint_b->length) + 1);
+    bigint *result = bigint_create_empty(max(left->length, right->length) + 1); // alocates the capacity of maximum possible value;
     if(!result)
     {
         return NULL;
     }
 
-    if(bint_a->sign == NEGATIVE && bint_b->sign == POSITIVE)
+    if(left->sign == NEGATIVE && right->sign == POSITIVE)
     {
-        if(!bigint_subtract_values(bint_b, bint_a, result))
+        if(!bigint_subtract_values(right, left, result))
         {
             bigint_destr(&result);
             return NULL;
@@ -633,9 +697,9 @@ bigint* bigint_add(const bigint *bint_a, const bigint *bint_b)
         return result;
     }
 
-    if(bint_a->sign == POSITIVE && bint_b->sign == NEGATIVE)
+    if(left->sign == POSITIVE && right->sign == NEGATIVE)
     {
-        if(!bigint_subtract_values(bint_a, bint_b, result))
+        if(!bigint_subtract_values(left, right, result))
         {
             bigint_destr(&result);
             return NULL;
@@ -644,8 +708,8 @@ bigint* bigint_add(const bigint *bint_a, const bigint *bint_b)
         return result;
     }
 
-    result->sign = bint_a->sign;
-    if(!bigint_add_values(bint_a, bint_b, result))
+    result->sign = left->sign;
+    if(!bigint_add_values(left, right, result))
     {
         bigint_destr(&result);
         return NULL;
@@ -656,23 +720,25 @@ bigint* bigint_add(const bigint *bint_a, const bigint *bint_b)
 
 
 
-bigint* bigint_subtract(const bigint *bint_a, const bigint *bint_b)
+//! Performs an certain subtraction-corresponding (addition or subtraction)
+//  operation considering the sign of both bigint values.
+bigint* bigint_subtract(const bigint *left, const bigint *right)
 {
-    if(!bint_a || !bint_a->value || !bint_b || !bint_b->value)
+    if(!left || !right)
     {
         return NULL;
     }
 
-    bigint *result = bigint_create_empty(max(bint_a->length, bint_b->length) + 1);
+    bigint *result = bigint_create_empty(max(left->length, right->length) + 1);
     if(!result)
     {
         return NULL;
     }
 
-    if(bint_a->sign == NEGATIVE && bint_b->sign == POSITIVE)
+    if(left->sign == NEGATIVE && right->sign == POSITIVE)
     {
         result->sign = NEGATIVE;
-        if(!bigint_add_values(bint_a, bint_b, result))
+        if(!bigint_add_values(left, right, result))
         {
             bigint_destr(&result);
             return NULL;
@@ -681,10 +747,10 @@ bigint* bigint_subtract(const bigint *bint_a, const bigint *bint_b)
         return result;
     }
 
-    if(bint_a->sign == POSITIVE && bint_b->sign == NEGATIVE)
+    if(left->sign == POSITIVE && right->sign == NEGATIVE)
     {
         result->sign = POSITIVE;
-        if(!bigint_add_values(bint_a, bint_b, result))
+        if(!bigint_add_values(left, right, result))
         {
             bigint_destr(&result);
             return NULL;
@@ -693,9 +759,9 @@ bigint* bigint_subtract(const bigint *bint_a, const bigint *bint_b)
         return result;
     }
 
-    if(bint_a->sign == NEGATIVE && bint_b->sign == NEGATIVE)
+    if(left->sign == NEGATIVE && right->sign == NEGATIVE)
     {
-        if(!bigint_subtract_values(bint_b, bint_a, result))
+        if(!bigint_subtract_values(right, left, result))
         {
             bigint_destr(&result);
             return NULL;
@@ -704,7 +770,7 @@ bigint* bigint_subtract(const bigint *bint_a, const bigint *bint_b)
         return result;
     }
 
-    if(!bigint_subtract_values(bint_a, bint_b, result))
+    if(!bigint_subtract_values(left, right, result))
     {
         bigint_destr(&result);
         return NULL;
@@ -715,78 +781,82 @@ bigint* bigint_subtract(const bigint *bint_a, const bigint *bint_b)
 
 
 
-bigint* bigint_multiply(const bigint *bint_a, const bigint *bint_b)
+//! Performs a multiplication operation considering the sign of both bigint
+//  values.
+bigint* bigint_multiply(const bigint *left, const bigint *right)
 {
-    if(!bint_a || !bint_a->value || !bint_b || !bint_b->value)
+    if(!left || !right)
     {
         return NULL;
     }
 
-
-    bigint *result = bigint_create_empty(bint_a->length + bint_b->length);
+    bigint *result = bigint_create_empty(left->length + right->length);
     if(!result)
     {
         return NULL;
     }
 
-    if(!bigint_multiply_values(bint_a, bint_b, result))
+    if(!bigint_multiply_values(left, right, result))
     {
         bigint_destr(&result);
         return NULL;
     }
-    result->sign = bint_a->sign * bint_b->sign;
+    result->sign = left->sign * right->sign;
 
     return result;
 }
 
 
 
-bigint* bigint_divide(const bigint *bint_a, const bigint *bint_b)
+//! Performs a division operation considering the sign of both bigint values.
+bigint* bigint_divide(const bigint *left, const bigint *right)
 {
-    if(!bint_a || !bint_a->value || !bint_b || !bint_b->value)
+    if(!left || !right)
     {
         return NULL;
     }
 
     bigint *bint_zero = bigint_from_int64(0);
-    if(bigint_compare(bint_b, bint_zero) == 0)
+    if(bigint_compare(right, bint_zero) == 0)
     {
         bigint_destr(&bint_zero);
         return NULL;
     }
     bigint_destr(&bint_zero);
 
-    bigint *result = bigint_create_empty(bint_a->length);
+    bigint *result = bigint_create_empty(left->length);
     if(!result)
     {
         return NULL;
     }
 
-    if(!bigint_divide_values(bint_a, bint_b, result))
+    if(!bigint_divide_values(left, right, result))
     {
         bigint_destr(&result);
         return NULL;
     }
-    result->sign = bint_a->sign * bint_b->sign;
+    result->sign = left->sign * right->sign;
 
     return result;
 }
 
 
 
-static bool bigint_add_values(const bigint *bint_a, const bigint *bint_b, bigint *result)
-{
-    if(!bint_a || !bint_a->value || !bint_b || !bint_b->value || !result || !result->value)
-    {
-        return false;
-    }
+//! Next functions perform mathematical operations between absolute values of
+//  two bigints and write the result into existing binint instance. These are
+//  called exclusevly by the functions from the list above, where passed
+//  arguments are guaranteed.
 
+//! Performs the long arithmetic addition of two bigint values.
+static bool bigint_add_values(const bigint *left, const bigint *right, bigint *result)
+{
     size_t i = 0;
-    for(uint32_t carry = 0; i < max(bint_a->length, bint_b->length) || carry; ++i)
+
+    for(uint32_t carry = 0; i < max(left->length, right->length) || carry; ++i)
     {
-        uint32_t left = i < bint_a->length ? bint_a->value[i] : 0;
-        uint32_t right = i < bint_b->length ? bint_b->value[i] : 0;
-        result->value[i] = left + right + carry;
+        uint32_t left_uint = i < left->length ? left->value[i] : 0;
+        uint32_t right_uint = i < right->length ? right->value[i] : 0;
+        result->value[i] = left_uint + right_uint + carry;
 
         if(result->value[i] >= BASE_DENARY)
         {
@@ -798,6 +868,7 @@ static bool bigint_add_values(const bigint *bint_a, const bigint *bint_b, bigint
             carry = 0;
         }
     }
+
     result->length = i;
 
     return true;
@@ -805,39 +876,42 @@ static bool bigint_add_values(const bigint *bint_a, const bigint *bint_b, bigint
 
 
 
-static bool bigint_subtract_values(const bigint *bint_a, const bigint *bint_b, bigint *result)
+//! Performs the long arithmetic subtraction of two bigint values.
+static bool bigint_subtract_values(const bigint *left, const bigint *right, bigint *result)
 {
-    if(!bint_a || !bint_a->value || !bint_b || !bint_b->value || !result || !result->value)
+    if(bigint_compare(left, right) == -1)
     {
-        return false;
-    }
-
-    if(bigint_compare(bint_a, bint_b) == -1)
-    {
-        const bigint *tmp = bint_a;
-        bint_a = bint_b;
-        bint_b = tmp;
+        const bigint *tmp = left;
+        left = right;
+        right = tmp;
         result->sign = NEGATIVE;
     }
 
     size_t i = 0;
-    for(uint32_t carry = 0; i < bint_a->length || carry; ++i)
+    for(uint32_t carry = 0; i < left->length || carry; ++i)
     {
-        int64_t left = bint_a->value[i];
-        int64_t right = i < bint_b->length ? bint_b->value[i] : 0;
-        int64_t intermediate = left - right - carry;
+        int64_t left_uint = left->value[i];
+        int64_t right_uint = i < right->length ? right->value[i] : 0;
+        int64_t intermediate = left_uint - right_uint - carry;
         if(intermediate < 0)
         {
             carry = 1;
             result->value[i] = (uint32_t)(intermediate + BASE_DENARY);
+            // safe cast since any element of bigint_t.value is less than
+            // BASE_DENARY and bigger than 0 so their subtraction cannot exceed
+            // the BASE_DENARY value;
         }
         else
         {
             carry = 0;
             result->value[i] = (uint32_t)intermediate;
+            // safe cast since any element of bigint_t.value is less than
+            // BASE_DENARY and their subtraction cannot exceed the max uint32_t
+            // value;
         }
     }
     result->length = i;
+
     bigint_remove_leading_zeros(result);
 
     return true;
@@ -845,27 +919,23 @@ static bool bigint_subtract_values(const bigint *bint_a, const bigint *bint_b, b
 
 
 
-static bool bigint_multiply_values(const bigint *bint_a, const bigint *bint_b, bigint *result)
+//! Performs the long arithmetic multiplication of two bigint values.
+static bool bigint_multiply_values(const bigint *left, const bigint *right, bigint *result)
 {
-    if(!bint_a || !bint_a->value || !bint_b || !bint_b->value || !result || !result->value)
-    {
-        return false;
-    }
-
     result->length = 0;
 
-    for(size_t i = 0, carry = 0; i < bint_a->length; ++i)
+    for(size_t i = 0, carry = 0; i < left->length; ++i)
     {
-        for(size_t j = 0; j < bint_b->length || carry; ++j)
+        for(size_t j = 0; j < right->length || carry; ++j)
         {
             if(i + j == result->length)
             {
                 bigint_pushback(result, 0);
             }
 
-            uint64_t left = bint_a->value[i];
-            uint64_t right = j < bint_b->length ? bint_b->value[j] : 0;
-            uint64_t intermediate = left * right + carry;
+            uint64_t left_uint = left->value[i];
+            uint64_t right_uint = j < right->length ? right->value[j] : 0;
+            uint64_t intermediate = left_uint * right_uint + carry;
 
             result->value[i + j] += (uint32_t)(intermediate % BASE_DENARY);
             carry = (uint32_t)(intermediate / BASE_DENARY);
@@ -877,21 +947,18 @@ static bool bigint_multiply_values(const bigint *bint_a, const bigint *bint_b, b
 
 
 
-static bool bigint_divide_values(const bigint *bint_a, const bigint *bint_b, bigint *result)
+//! Performs the long arithmetic division of two bigint values.
+//  OH GOD PLS NO. NO-O!
+static bool bigint_divide_values(const bigint *left, const bigint *right, bigint *result)
 {
-    if(!bint_a || !bint_a->value || !bint_b || !bint_b->value || !result || !result->value)
-    {
-        return false;
-    }
-
-    if(bigint_compare(bint_a, bint_b) == -1)
+    if(bigint_compare(left, right) == -1)
     {
         result->value[0] = 0;
         result->length = 1;
         return true;
     }
 
-    bigint *bint_current = bigint_create_empty(bint_a->length);
+    bigint *bint_current = bigint_create_empty(left->length);
     if(!bint_current)
     {
         return false;
@@ -905,18 +972,18 @@ static bool bigint_divide_values(const bigint *bint_a, const bigint *bint_b, big
     }
     bint_multiplicator->length = 1;
 
-    for(int i = (int)bint_a->length - 1; i >= 0; --i)
+    for(int i = (int)left->length - 1; i >= 0; --i)
     {
-        bigint_pushfront(bint_current, bint_a->value[i]);
+        bigint_pushfront(bint_current, left->value[i]);
         uint32_t max_dividor = 0;
         uint32_t left_end = 0;
         uint32_t right_end = BASE_DENARY;
-        // Select the maximum number max_dividor, such is that bint_b * max_dividor <= current_value
+        // Select the maximum number max_dividor, such is that right * max_dividor <= current_value
         while(left_end <= right_end)
         {
             uint32_t multiplicator = (left_end + right_end) >> 1;
             bint_multiplicator->value[0] = multiplicator;
-            bigint *bint_mult_checker = bigint_multiply(bint_b, bint_multiplicator);
+            bigint *bint_mult_checker = bigint_multiply(right, bint_multiplicator);
             if(!bint_mult_checker)
             {
                 bigint_destr(&bint_current);
@@ -939,7 +1006,7 @@ static bool bigint_divide_values(const bigint *bint_a, const bigint *bint_b, big
         ++result->length;
 
         bint_multiplicator->value[0] = max_dividor;
-        bigint *bint_mult_checker = bigint_multiply(bint_b, bint_multiplicator);
+        bigint *bint_mult_checker = bigint_multiply(right, bint_multiplicator);
         if(!bint_mult_checker)
         {
             bigint_destr(&bint_current);
@@ -972,6 +1039,9 @@ static bool bigint_divide_values(const bigint *bint_a, const bigint *bint_b, big
 ////////////////////////////////////////
 //// The token interface
 ////////////////////////////////////////
+
+//! Gets a token from [src_str] shifted by [str_iter] characters. Shifts
+//  str_iter forward by the length of the taken token.
 token_t* token_get(const char *src_str, size_t *str_iter)
 {
     if(!src_str || !str_iter)
@@ -987,7 +1057,8 @@ token_t* token_get(const char *src_str, size_t *str_iter)
 
     char literal = src_str[*str_iter];
     ++(*str_iter);
-    while(literal == ' ')
+
+    while(literal == ' ') // ignore all spaces before
     {
         literal = src_str[*str_iter];
         ++(*str_iter);
@@ -1011,6 +1082,8 @@ token_t* token_get(const char *src_str, size_t *str_iter)
 
 
 
+//! Frees the allocated memory for a token instance and nullifies the passed
+//  pointer value.
 void token_destr(token_t **origin)
 {
     if(!origin || !(*origin))
@@ -1029,64 +1102,64 @@ void token_destr(token_t **origin)
 
 
 
+//! Tries to interpret a character as an operator.
 static bool token_get_operator(char literal, token_t *token_ptr)
 {
-    if(!token_ptr)
-    {
-        return false;
-    }
-
     switch(literal)
     {
-        case '+':
-            token_ptr->kind = ADDITION;
-            token_ptr->data.operation_fn = &bigint_add;
-            return true;
-        case '-':
-            token_ptr->kind = SUBTRACTION;
-            token_ptr->data.operation_fn = &bigint_subtract;
-            return true;
-        case '*':
-            token_ptr->kind = MULTIPLICATION;
-            token_ptr->data.operation_fn = &bigint_multiply;
-            return true;
-        case '/':
-            token_ptr->kind = DIVISION;
-            token_ptr->data.operation_fn = &bigint_divide;
-            return true;
-        case '(':
-            token_ptr->kind = LEFT_PARENTHESIS;
-            token_ptr->data.operation_fn = NULL;
-            return true;
-        case ')':
-            token_ptr->kind = RIGHT_PARENTHESIS;
-            token_ptr->data.operation_fn = NULL;
-            return true;
-        case '\n':
-        case '\0':
-            token_ptr->kind = END_OF_EXPRETION;
-            token_ptr->data.operation_fn = NULL;
-            return true;
-        case EOF:
-            token_ptr->kind = END_OF_FILE;
-            token_ptr->data.operation_fn = NULL;
-            return true;
-        default:
-            token_ptr->kind = NONE;
-            token_ptr->data.operation_fn = NULL;
-            return false;
+    case '+':
+        token_ptr->kind = ADDITION;
+        token_ptr->data.operation_fn = &bigint_add;
+        return true;
+
+    case '-':
+        token_ptr->kind = SUBTRACTION;
+        token_ptr->data.operation_fn = &bigint_subtract;
+        return true;
+
+    case '*':
+        token_ptr->kind = MULTIPLICATION;
+        token_ptr->data.operation_fn = &bigint_multiply;
+        return true;
+
+    case '/':
+        token_ptr->kind = DIVISION;
+        token_ptr->data.operation_fn = &bigint_divide;
+        return true;
+
+    case '(':
+        token_ptr->kind = LEFT_PARENTHESIS;
+        token_ptr->data.operation_fn = NULL;
+        return true;
+
+    case ')':
+        token_ptr->kind = RIGHT_PARENTHESIS;
+        token_ptr->data.operation_fn = NULL;
+        return true;
+
+    case '\n':
+    case '\0':
+        token_ptr->kind = END_OF_EXPRETION;
+        token_ptr->data.operation_fn = NULL;
+        return true;
+
+    case EOF:
+        token_ptr->kind = END_OF_FILE;
+        token_ptr->data.operation_fn = NULL;
+        return true;
+
+    default:
+        token_ptr->kind = NONE;
+        token_ptr->data.operation_fn = NULL;
+        return false;
     }
 }
 
 
 
+//! Tries to get an operand from passed string.
 static bool token_get_operand(const char *src_str, size_t *str_iter, token_t *token_ptr)
 {
-    if(!src_str || !str_iter || !token_ptr)
-    {
-        return false;
-    }
-
     size_t buf_size = BIGINT_STR_GROWTH + 1;
     char *buf = (char*)malloc(buf_size * sizeof(char));
     if(!buf)
@@ -1094,28 +1167,30 @@ static bool token_get_operand(const char *src_str, size_t *str_iter, token_t *to
         return false;
     }
 
-    size_t i = 0;
     char literal = src_str[*str_iter];
     ++(*str_iter);
+
+    size_t i = 0;
     for( ; isdigit(literal); ++i)
     {
         if(i == buf_size)
         {
             buf_size += BIGINT_STR_GROWTH;
 
-            char *ptr = (char*)realloc(buf, buf_size * sizeof(char));
-            if(!ptr)
+            char *new_buf = (char*)realloc(buf, buf_size * sizeof(char));
+            if(!new_buf)
             {
                 free(buf);
                 return false;
             }
-            buf = ptr;
+            buf = new_buf;
         }
 
         buf[i] = literal;
         literal = src_str[*str_iter];
         ++(*str_iter);
     }
+
     buf[i] = '\0';
 
     if(i == 0)
@@ -1126,10 +1201,12 @@ static bool token_get_operand(const char *src_str, size_t *str_iter, token_t *to
     }
 
     --(*str_iter);
+
     token_ptr->kind = NUMBER;
-    token_ptr->data.bigint = bigint_from_string(buf);
+    token_ptr->data.bigint = bigint_from_string(buf, i);
 
     free(buf);
+
     return true;
 }
 
@@ -1138,7 +1215,9 @@ static bool token_get_operand(const char *src_str, size_t *str_iter, token_t *to
 ////////////////////////////////////////
 //// The token_stack interface
 ////////////////////////////////////////
-token_stack* token_stack_create(const token_t *src_array, size_t cap)
+
+//! Creates the empty instance of token stack of the [cap] capacity.
+token_stack* token_stack_create(size_t cap)
 {
     if(cap == 0)
     {
@@ -1159,23 +1238,15 @@ token_stack* token_stack_create(const token_t *src_array, size_t cap)
     }
 
     new_tstack->capacity = cap;
-    new_tstack->top = -1;
-
-    if(!src_array)
-    {
-        return new_tstack;
-    }
-
-    for(size_t i = 0; i < cap; ++i)
-    {
-        token_stack_push(new_tstack, (src_array + i));
-    }
+    new_tstack->length = 0;
 
     return new_tstack;
 }
 
 
 
+//! Frees the allocated memory for a token stack instance and nullifies the
+//  passed pointer value.
 void token_stack_destr(token_stack **origin)
 {
     if(!origin || !(*origin))
@@ -1199,40 +1270,46 @@ void token_stack_destr(token_stack **origin)
 
 
 
-void token_stack_push(token_stack *dest, const token_t *value)
+//! Pushes the passed value to the top of [dest] token stack by value.
+bool token_stack_push(token_stack *dest, const token_t *value)
 {
     if(!dest)
     {
-        return;
+        return false;
     }
 
     if(token_stack_is_full(dest))
     {
         if(!token_stack_expand(dest, dest->capacity + TOKEN_STACK_GROWTH))
         {
-            return;
+            return false;
         }
     }
 
-    ++dest->top;
-    dest->array[dest->top] = *value;
+    dest->array[dest->length] = *value;
+    ++dest->length;
+
+    return true;
 }
 
 
 
+//! Pops the top value of the [origin] token stack.
 token_t token_stack_pop(token_stack *origin)
 {
     if(!origin || token_stack_is_empty(origin))
     {
-        token_t empty_token = {NONE, {NULL}};
+        token_t empty_token = { .kind = NONE, .data = {NULL} };
         return empty_token;
     }
 
-    return origin->array[origin->top--];
+    --origin->length;
+    return origin->array[origin->length];
 }
 
 
 
+//! Returns the top value of passed token stack.
 const token_t* token_stack_peek(const token_stack *origin)
 {
     if(!origin || token_stack_is_empty(origin))
@@ -1240,29 +1317,27 @@ const token_t* token_stack_peek(const token_stack *origin)
         return NULL;
     }
 
-    return &(origin->array[origin->top]);
+    return &(origin->array[origin->length - 1]);
 }
 
 
 
-bool token_stack_expand(token_stack *origin, size_t cap)
+//! Expands the current capacity of the passed token stack instance with a new
+//  one if it is bigger than previous capacity.
+static bool token_stack_expand(token_stack *origin, size_t cap)
 {
-    if(!origin)
-    {
-        return false;
-    }
-
     if(cap <= origin->capacity)
     {
         return true;
     }
 
-    token_t *ptr = (token_t*)realloc(origin->array, cap * sizeof(token_t));
-    if(!ptr)
+    token_t *new_data = (token_t*)realloc(origin->array, cap * sizeof(token_t));
+    if(!new_data)
     {
         return false;
     }
-    origin->array = ptr;
+
+    origin->array = new_data;
     origin->capacity = cap;
 
     return true;
@@ -1270,16 +1345,18 @@ bool token_stack_expand(token_stack *origin, size_t cap)
 
 
 
-bool token_stack_is_empty(const token_stack *src)
+//! Returns true if the passed token stack is empty. False otherwise.
+static bool token_stack_is_empty(const token_stack *tstack)
 {
-    return (src->top == -1);
+    return (tstack->length == 0);
 }
 
 
 
-bool token_stack_is_full(const token_stack *src)
+//! Returns true if the passed token stack is full. False otherwise.
+static bool token_stack_is_full(const token_stack *tstack)
 {
-    return (src->top == (int)(src->capacity) - 1);
+    return (tstack->length == tstack->capacity);
 }
 
 
@@ -1288,6 +1365,8 @@ bool token_stack_is_full(const token_stack *src)
 ////////////////////////////////////////
 //// The postfix_notation interface
 ////////////////////////////////////////
+
+//! Creates an empty instance of postfix notation;
 postfix_notation* postfix_notation_create_empty()
 {
     postfix_notation *new_notation = (postfix_notation*)malloc(sizeof(postfix_notation));
@@ -1296,14 +1375,14 @@ postfix_notation* postfix_notation_create_empty()
         return NULL;
     }
 
-    new_notation->operands = token_stack_create(NULL, TOKEN_STACK_GROWTH);
+    new_notation->operands = token_stack_create(TOKEN_STACK_GROWTH);
     if(!new_notation->operands)
     {
         free(new_notation);
         return NULL;
     }
 
-    new_notation->operators = token_stack_create(NULL, TOKEN_STACK_GROWTH);
+    new_notation->operators = token_stack_create(TOKEN_STACK_GROWTH);
     if(!new_notation->operators)
     {
         token_stack_destr(&new_notation->operands);
@@ -1316,6 +1395,8 @@ postfix_notation* postfix_notation_create_empty()
 
 
 
+//! Frees the allocated memory for a postfix notation instance and nullifies the
+//  passed pointer value.
 void postfix_notation_destr(postfix_notation **origin)
 {
     if(!origin || !(*origin))
@@ -1331,7 +1412,8 @@ void postfix_notation_destr(postfix_notation **origin)
 
 
 
-
+//! Adds another token into ints correspondig stack of the passed notation.
+//  Reduces the notation if possible.
 bool postfix_notation_add_token(postfix_notation *dest, token_t *token)
 {
     if(!token)
@@ -1339,6 +1421,8 @@ bool postfix_notation_add_token(postfix_notation *dest, token_t *token)
         return false;
     }
 
+    // if the next passed operator is RIGHT_PARENTHESIS reduce the notation until
+    // the neares LEFT_PARENTHESIS or until the operators stack is not empty.
     if(token->kind == RIGHT_PARENTHESIS)
     {
         while(!token_stack_is_empty(dest->operators) && token_stack_peek(dest->operators)->kind != LEFT_PARENTHESIS)
@@ -1348,11 +1432,14 @@ bool postfix_notation_add_token(postfix_notation *dest, token_t *token)
                 return false;
             }
         }
-        token_stack_pop(dest->operators);
+
+        token_stack_pop(dest->operators); // remove the found LEFT_PARENTHESIS.
 
         return true;
     }
 
+    // reduce the notation until the previous operator is of a higher priority
+    // than the new one.
     while(postfix_notation_can_reduce(dest, token))
     {
         if(!postfix_notation_reduce(dest))
@@ -1361,18 +1448,27 @@ bool postfix_notation_add_token(postfix_notation *dest, token_t *token)
         }
     }
 
+    // push the new token to the corresponding stack.
     switch(token->kind)
     {
-        case NONE:
-        case END_OF_EXPRETION:
-        case END_OF_FILE:
-            break;
-        case NUMBER:
-            token_stack_push(dest->operands, token);
-            break;
-        default:
-            token_stack_push(dest->operators, token);
-            break;
+    case NONE:
+    case END_OF_EXPRETION:
+    case END_OF_FILE:
+        break;
+
+    case NUMBER:
+        if(!token_stack_push(dest->operands, token))
+        {
+            return false;
+        }
+        break;
+
+    default:
+        if(!token_stack_push(dest->operators, token))
+        {
+            return false;
+        }
+        break;
     }
 
     return true;
@@ -1380,33 +1476,43 @@ bool postfix_notation_add_token(postfix_notation *dest, token_t *token)
 
 
 
+//! Determines the priority value for the passed token.
+//  The operator with bigger priority forces the postfix notation to be reduced
+//  until the previous operator is of the lower priority in the operators stack.
+//  - NUMBER is not an operator;
+//  - LEFT_PARENTHESIS can only be reduced by RIGHT_PARENTHESIS explicitly;
+//  - MULTIPLICATION and DIVISION can only reduce each other;
+//  - ADDITION and SUBTRACTION can reduce each other, MULTIPLICATION and DIVISION;
+//  - END_OF_EXPRETION and END_OF_FILE reduce any operator.
 static int postfix_notation_prioritize(const token_t *token)
 {
-    if(!token)
-    {
-        return 0;
-    }
-// The operator with bigger priority pushes previous operator with lower priority out of operators stack.
     switch(token->kind)
     {
-        case LEFT_PARENTHESIS:
-            return -1;
-        case MULTIPLICATION:
-        case DIVISION:
-            return 1;
-        case ADDITION:
-        case SUBTRACTION:
-            return 2;
-        case END_OF_EXPRETION:
-        case END_OF_FILE:
-            return 3;
-        default:
-            return 0;
+    case NUMBER:
+    case LEFT_PARENTHESIS:
+    case RIGHT_PARENTHESIS:
+        return -1;
+
+    case MULTIPLICATION:
+    case DIVISION:
+        return 1;
+
+    case ADDITION:
+    case SUBTRACTION:
+        return 2;
+
+    case END_OF_EXPRETION:
+    case END_OF_FILE:
+        return 3;
+
+    default:
+        return 0;
     }
 }
 
 
 
+//! Determines whether the passed token can reduce the previous one.
 static bool postfix_notation_can_reduce(const postfix_notation *origin, const token_t *next_token)
 {
     if(token_stack_is_empty(origin->operators))
@@ -1414,17 +1520,23 @@ static bool postfix_notation_can_reduce(const postfix_notation *origin, const to
         return false;
     }
 
-    int priority_curr = postfix_notation_prioritize(token_stack_peek(origin->operators));
+    int priority_prev = postfix_notation_prioritize(token_stack_peek(origin->operators));
     int priority_new = postfix_notation_prioritize(next_token);
 
-    return (priority_curr >= 0 && priority_new >= 0 && priority_new >= priority_curr);
+    return (priority_prev > 0 && priority_new > 0 && priority_new >= priority_prev);
 }
 
 
 
+//! Reduces the top-most operator in operators stack.
+//  There is no reduction to be done (still valid) if the operators stack is empty.
+//  All operators are handled as binary (unary operators have a fictive 0 as left operand).
+//  The result operand is pushed at the top of the operands stack.
+//  Thus any result expression MUST have as many math operators as operands - 1.
+//  The last remaining operand is the result.
 static bool postfix_notation_reduce(postfix_notation *origin)
 {
-    operation_fn action = token_stack_pop(origin->operators).data.operation_fn;
+    operation_fn_t action = token_stack_pop(origin->operators).data.operation_fn;
     if(!action)
     {
         return true;
@@ -1432,17 +1544,20 @@ static bool postfix_notation_reduce(postfix_notation *origin)
 
     bigint *right = token_stack_pop(origin->operands).data.bigint;
     bigint *left = token_stack_pop(origin->operands).data.bigint;
-
     if(!right || !left)
     {
         return false;
     }
 
-    token_t result;
-    result.kind = NUMBER;
-    result.data.bigint = action(left, right);
+    token_t result = { .kind = NUMBER, .data.bigint = action(left, right) };
 
-    token_stack_push(origin->operands, &result);
+    if(!result.data.bigint || !token_stack_push(origin->operands, &result))
+    {
+        bigint_destr(&left);
+        bigint_destr(&right);
+
+        return false;
+    }
 
     bigint_destr(&left);
     bigint_destr(&right);
