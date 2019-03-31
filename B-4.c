@@ -33,7 +33,7 @@
 
 
 #define BASE_DENARY        1000000000 // 10^9
-#define MAX_UINT32_LENGTH  9
+#define MAX_UINT32_LENGTH  9  // The longest possible value that can be written without any precision loss with BASE_DENARY base value.
 #define BIGINT_STR_GROWTH  64
 #define TOKEN_STACK_GROWTH 8
 
@@ -133,7 +133,6 @@ typedef struct
 ////////////////////////////////////////
 //// General
 ////////////////////////////////////////
-//! Performs mathematical calculation according to passed string.
 bigint* calculate(const char *src_str, size_t str_length);
 size_t max(size_t a, size_t b);
 
@@ -156,18 +155,11 @@ static void bigint_remove_leading_zeros(bigint *origin);
 
 int bigint_compare(const bigint *left, const bigint *right);
 
-//! Next functions perform mathematical operations between two bigints and write
-//  the result into a newly allocated instance of bigint which has to be freed
-//  manually. Considering the combinations of the signs of passed bigints, these
-//  call a corresponding function from the set below.
 bigint* bigint_add(const bigint *left, const bigint *right);
 bigint* bigint_subtract(const bigint *left, const bigint *right);
 bigint* bigint_multiply(const bigint *left, const bigint *right);
 bigint* bigint_divide(const bigint *left, const bigint *right);
 
-//! Next functions perform mathematical operations between absolute values of
-//  two bigints and write the result into existing binint instance. These are
-//  called exclusevly by the functions from the set above.
 static bool bigint_add_values(const bigint *left, const bigint *right, bigint *result);
 static bool bigint_subtract_values(const bigint *left, const bigint *right, bigint *result);
 static bool bigint_multiply_values(const bigint *left, const bigint *right, bigint *result);
@@ -195,8 +187,8 @@ token_t token_stack_pop(token_stack *origin);
 const token_t* token_stack_peek(const token_stack *origin);
 
 static bool token_stack_expand(token_stack *origin, size_t cap);
-static bool token_stack_is_empty(const token_stack *src);
-static bool token_stack_is_full(const token_stack *src);
+static bool token_stack_is_empty(const token_stack *tstack);
+static bool token_stack_is_full(const token_stack *tstack);
 
 
 
@@ -260,7 +252,7 @@ int main()
 //// General
 ////////////////////////////////////////
 
-//! Performs mathematical calculation according to passed string
+//! Performs mathematical calculation according to passed string.
 bigint* calculate(const char *src_str, size_t str_length)
 {
     if(!src_str)
@@ -274,7 +266,7 @@ bigint* calculate(const char *src_str, size_t str_length)
         return NULL;
     }
 
-    token_kind prev = LEFT_PARENTHESIS; // for unary minus detection
+    token_kind prev = LEFT_PARENTHESIS; // for unary minus detection.
     for(size_t str_iter = 0; str_iter <= str_length; )
     {
         token_t *token = token_get(src_str, &str_iter);
@@ -284,7 +276,7 @@ bigint* calculate(const char *src_str, size_t str_length)
             return NULL;
         }
 
-        // Add fictive 0 as a left operand for unary minus as 0 - num == -num
+        // add a fictive 0 as the left operand for unary minus as 0 - num == -num.
         if(prev == LEFT_PARENTHESIS && token->kind == SUBTRACTION)
         {
             token_t tzero = { .kind = NUMBER, .data.bigint = bigint_from_int64(0) };
@@ -317,9 +309,9 @@ bigint* calculate(const char *src_str, size_t str_length)
 
     // If the passed string is a correct and valid mathematical expression,
     // the only value in the notation left is the result.
+    // If there are no values in the operands stack, there was none in the source expression.
     bigint *result = token_stack_pop(notation->operands).data.bigint;
 
-    // If there are no values in the operands stack, there was none in the source expression;
     // If there are any operators or operands left other than the result, the result is undefined.
     if(!result || !token_stack_is_empty(notation->operators) || !token_stack_is_empty(notation->operands))
     {
@@ -367,7 +359,8 @@ bigint* bigint_from_string(const char *src_str, size_t str_length)
 
     for( ; str_length > MAX_UINT32_LENGTH; str_length -= MAX_UINT32_LENGTH)
     {
-        strncpy(buf, &(src_str[str_length - MAX_UINT32_LENGTH]), MAX_UINT32_LENGTH); // cuts another MAX_UINT32_LENGTH digits from the string
+        // cuts another MAX_UINT32_LENGTH digits from the right end of the string.
+        strncpy(buf, &(src_str[str_length - MAX_UINT32_LENGTH]), MAX_UINT32_LENGTH);
         buf[MAX_UINT32_LENGTH] = '\0';
 
         if(!bigint_pushback(new_bint, (uint32_t)strtoul(buf, NULL, 10)))
@@ -377,7 +370,8 @@ bigint* bigint_from_string(const char *src_str, size_t str_length)
         }
     }
 
-    strncpy(buf, src_str, str_length); // writes remaining MAX_UINT32_LENGTH or less characters
+    // writes remaining MAX_UINT32_LENGTH (or less) characters.
+    strncpy(buf, src_str, str_length);
     buf[str_length] = '\0';
 
     if(!bigint_pushback(new_bint, (uint32_t)strtoul(buf, NULL, 10)))
@@ -395,9 +389,9 @@ bigint* bigint_from_string(const char *src_str, size_t str_length)
 
 //! Consecutively cuts MAX_UINT32_LENGTH (or less) digits from input int64_t
 //  value until it becomes equal to 0, converts the cut value into uint32_t
-//  instance and pushes it back into newly created bigint instance. Returns the
-//  created bigint pointer or NULL if error occurred. Sets the result sign
-//  accoringly.
+//  instance and pushes it back into newly created bigint instance.
+//  Returns the created bigint pointer or NULL if error occurred.
+//  Sets the result sign accoringly.
 bigint* bigint_from_int64(int64_t src_val)
 {
     bigint *new_bint = bigint_create_empty(1);
@@ -453,10 +447,10 @@ void bigint_destr(bigint **origin)
 
 
 
-//! Converts the passed bigint instance into string. Returns the pointer to the
-//  allocated string or NULL if error occurred.
-//! Firstly takes the value of the highest significance uint32_t value of the
-//  passed bigint as it might be of any length and prints it to the result
+//! Converts the passed bigint instance into string.
+//  Returns the pointer to the allocated string or NULL if error occurred.
+//! Firstly takes the value of the highest significant uint32_t value of the
+//  passed bigint, as it might be of any length, and prints it to the result
 //  string. Then consecutively takes another uint32_t value as it MUST be of
 //  MAX_UINT32_LENGTH and prints it to the result string.
 char* bigint_to_string(const bigint *src_bint)
@@ -466,21 +460,23 @@ char* bigint_to_string(const bigint *src_bint)
         return NULL;
     }
 
-    char *result = (char*)malloc((src_bint->length * MAX_UINT32_LENGTH + 1) * sizeof(char)); // allocates the string of the maximum possible length for the passed bigint;
+    // allocates the string of the maximum possible length for the passed bigint.
+    char *result = (char*)malloc((src_bint->length * MAX_UINT32_LENGTH + 1) * sizeof(char));
     if(!result)
     {
         return NULL;
     }
 
-    char *str_iter = result; // the result string iterator;
-    size_t i = src_bint->length; // the passed bigint iterator. Goes from last to the first uint32_t value;
+    char *str_iter = result; // the result string iterator.
+    size_t i = src_bint->length; // the passed bigint iterator. Goes from last to the first uint32_t value.
 
-    snprintf(str_iter, MAX_UINT32_LENGTH + 1, "%u", src_bint->value[i - 1]); // print MAX_UINT32_LENGTH (or less) digits into the result string + '\0' char;
-    str_iter += strlen(str_iter); // shifts the iterator right by the printed value length;
+    // print MAX_UINT32_LENGTH (or less) digits into the result string + '\0' char.
+    snprintf(str_iter, MAX_UINT32_LENGTH + 1, "%u", src_bint->value[i - 1]);
+    str_iter += strlen(str_iter); // shifts the iterator right by the printed value length.
 
-    for(--i; i > 0; --i) // repeat for the remaining uint32_t values;
+    for(--i; i > 0; --i) // repeat for the remaining uint32_t values.
     {
-        // will ALWAYS print MAX_UINT32_LENGTH (if less substitudes the
+        // will ALWAYS print MAX_UINT32_LENGTH (if less, substitudes the
         // remaining digits with 0) digits into the result string + '\0' char at
         // the end ('\0' gets rewritten by the next printed uint32_t).
         snprintf(str_iter, MAX_UINT32_LENGTH + 1, "%09u", src_bint->value[i - 1]);
@@ -590,12 +586,12 @@ static bool bigint_pushfront(bigint *dest_bint, uint32_t src_val)
         }
     }
 
-    for(size_t i = dest_bint->length; i > 0; --i) // shifts all values right by 1;
+    for(size_t i = dest_bint->length; i > 0; --i) // shifts all values right by 1.
     {
         dest_bint->value[i] = dest_bint->value[i - 1];
     }
 
-    dest_bint->value[0] = src_val; // writes the passed value to the vacant element;
+    dest_bint->value[0] = src_val; // writes the passed value to the vacant element.
     ++dest_bint->length;
 
     return true;
@@ -604,7 +600,7 @@ static bool bigint_pushfront(bigint *dest_bint, uint32_t src_val)
 
 
 //! Expands the current capacity of the passed bigint instance with a new one if
-//  it is bigger that previous one.
+//  it is bigger than previous one.
 static bool bigint_expand(bigint *origin, size_t new_cap)
 {
     if(new_cap <= origin->capacity)
@@ -612,7 +608,7 @@ static bool bigint_expand(bigint *origin, size_t new_cap)
         return true;
     }
 
-    uint32_t *new_value = (uint32_t*)realloc(origin->value, sizeof(uint32_t) * new_cap);
+    uint32_t *new_value = (uint32_t*)realloc(origin->value, new_cap * sizeof(uint32_t));
     if(!new_value)
     {
         return false;
@@ -625,8 +621,8 @@ static bool bigint_expand(bigint *origin, size_t new_cap)
 
 
 
-//! Decreases the length of the bigint until the most significant value is not
-//  0. DOES NOT affect memory in any way.
+//! Decreases the length of the passed bigint until its most significant value is not
+//  0. DOES NOT affect allocated memory in any way.
 static void bigint_remove_leading_zeros(bigint *origin)
 {
     while(origin->value[origin->length - 1] == 0 && origin->length > 1)
@@ -637,9 +633,10 @@ static void bigint_remove_leading_zeros(bigint *origin)
 
 
 
-//! Compares absolute values of two bigints. Returns 1, if bint_left is greater
-//  than bint_right; -1 if bint_left is less than bint_right; 0 if they are
-//  equal.
+//! Compares absolute values of two bigints.
+//  Returns 1, if bint_left is greater than bint_right;
+//  -1 if bint_left is less than bint_right;
+//  0 if they are equal.
 int bigint_compare(const bigint *left, const bigint *right)
 {
     if(!left || !right)
@@ -669,7 +666,7 @@ int bigint_compare(const bigint *left, const bigint *right)
 //! Next functions perform mathematical operations between two bigints and write
 //  the result into a newly allocated instance of bigint which has to be freed
 //  manually. Considering the combinations of the signs of passed bigints, these
-//  call a corresponding function from the set below.
+//  call a corresponding static function from the set below.
 
 //! Performs an certain addition-corresponding (addition or subtraction)
 //  operation considering the sign of both bigint values.
@@ -680,7 +677,8 @@ bigint* bigint_add(const bigint *left, const bigint *right)
         return NULL;
     }
 
-    bigint *result = bigint_create_empty(max(left->length, right->length) + 1); // alocates the capacity of maximum possible value;
+    // alocates the capacity of maximum possible value.
+    bigint *result = bigint_create_empty(max(left->length, right->length) + 1);
     if(!result)
     {
         return NULL;
@@ -729,6 +727,7 @@ bigint* bigint_subtract(const bigint *left, const bigint *right)
         return NULL;
     }
 
+    // alocates the capacity of maximum possible value.
     bigint *result = bigint_create_empty(max(left->length, right->length) + 1);
     if(!result)
     {
@@ -790,6 +789,7 @@ bigint* bigint_multiply(const bigint *left, const bigint *right)
         return NULL;
     }
 
+    // alocates the capacity of maximum possible value.
     bigint *result = bigint_create_empty(left->length + right->length);
     if(!result)
     {
@@ -816,6 +816,7 @@ bigint* bigint_divide(const bigint *left, const bigint *right)
         return NULL;
     }
 
+    // division by 0 is undefined.
     bigint *bint_zero = bigint_from_int64(0);
     if(bigint_compare(right, bint_zero) == 0)
     {
@@ -824,6 +825,7 @@ bigint* bigint_divide(const bigint *left, const bigint *right)
     }
     bigint_destr(&bint_zero);
 
+    // alocates the capacity of maximum possible value.
     bigint *result = bigint_create_empty(left->length);
     if(!result)
     {
@@ -888,6 +890,7 @@ static bool bigint_subtract_values(const bigint *left, const bigint *right, bigi
     }
 
     size_t i = 0;
+
     for(uint32_t carry = 0; i < left->length || carry; ++i)
     {
         int64_t left_uint = left->value[i];
@@ -899,7 +902,7 @@ static bool bigint_subtract_values(const bigint *left, const bigint *right, bigi
             result->value[i] = (uint32_t)(intermediate + BASE_DENARY);
             // safe cast since any element of bigint_t.value is less than
             // BASE_DENARY and bigger than 0 so their subtraction cannot exceed
-            // the BASE_DENARY value;
+            // the BASE_DENARY value.
         }
         else
         {
@@ -907,9 +910,10 @@ static bool bigint_subtract_values(const bigint *left, const bigint *right, bigi
             result->value[i] = (uint32_t)intermediate;
             // safe cast since any element of bigint_t.value is less than
             // BASE_DENARY and their subtraction cannot exceed the max uint32_t
-            // value;
+            // value.
         }
     }
+
     result->length = i;
 
     bigint_remove_leading_zeros(result);
@@ -978,7 +982,7 @@ static bool bigint_divide_values(const bigint *left, const bigint *right, bigint
         uint32_t max_dividor = 0;
         uint32_t left_end = 0;
         uint32_t right_end = BASE_DENARY;
-        // Select the maximum number max_dividor, such is that right * max_dividor <= current_value
+        // Select the maximum number max_dividor, such is that right * max_dividor <= current_value.
         while(left_end <= right_end)
         {
             uint32_t multiplicator = (left_end + right_end) >> 1;
@@ -1040,8 +1044,8 @@ static bool bigint_divide_values(const bigint *left, const bigint *right, bigint
 //// The token interface
 ////////////////////////////////////////
 
-//! Gets a token from [src_str] shifted by [str_iter] characters. Shifts
-//  str_iter forward by the length of the taken token.
+//! Gets a token from [src_str] shifted by [str_iter] characters.
+//  Shifts str_iter forward by the length of the taken token.
 token_t* token_get(const char *src_str, size_t *str_iter)
 {
     if(!src_str || !str_iter)
@@ -1058,7 +1062,7 @@ token_t* token_get(const char *src_str, size_t *str_iter)
     char literal = src_str[*str_iter];
     ++(*str_iter);
 
-    while(literal == ' ') // ignore all spaces before
+    while(literal == ' ') // ignore all spaces before.
     {
         literal = src_str[*str_iter];
         ++(*str_iter);
@@ -1323,7 +1327,7 @@ const token_t* token_stack_peek(const token_stack *origin)
 
 
 //! Expands the current capacity of the passed token stack instance with a new
-//  one if it is bigger than previous capacity.
+//  one if it is bigger than the previous capacity.
 static bool token_stack_expand(token_stack *origin, size_t cap)
 {
     if(cap <= origin->capacity)
@@ -1366,7 +1370,7 @@ static bool token_stack_is_full(const token_stack *tstack)
 //// The postfix_notation interface
 ////////////////////////////////////////
 
-//! Creates an empty instance of postfix notation;
+//! Creates an empty instance of postfix notation.
 postfix_notation* postfix_notation_create_empty()
 {
     postfix_notation *new_notation = (postfix_notation*)malloc(sizeof(postfix_notation));
