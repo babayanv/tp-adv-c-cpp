@@ -220,7 +220,7 @@ int main()
             LOG_ERROR;
             return 0;
         }
-        if(input_length == -1)
+        if(input_length < 0)
         {
             free(input_str);
             return 0;
